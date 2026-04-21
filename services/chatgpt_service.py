@@ -3,7 +3,7 @@ from __future__ import annotations
 from fastapi import HTTPException
 
 from services.account_service import AccountService
-from services.image_service import ImageGenerationError, generate_image_result, is_token_invalid_error
+from services.image_service import ImageGenerationError, edit_image_result, generate_image_result, is_token_invalid_error
 from services.utils import (
     build_chat_image_completion,
     extract_chat_prompt,
@@ -18,9 +18,79 @@ class ChatGPTService:
     def __init__(self, account_service: AccountService):
         self.account_service = account_service
 
-    def generate_with_pool(self, prompt: str, model: str, n: int):
+    def _run_with_pool(
+        self,
+        prompt: str,
+        model: str,
+        n: int,
+        runner,
+        *,
+        preferred_account_id: str | None = None,
+        upstream_conversation_id: str | None = None,
+        upstream_parent_message_id: str | None = None,
+    ):
+        preferred_account_id = str(preferred_account_id or "").strip() or None
+        upstream_conversation_id = str(upstream_conversation_id or "").strip() or None
+        upstream_parent_message_id = str(upstream_parent_message_id or "").strip() or None
+        if (preferred_account_id or upstream_conversation_id or upstream_parent_message_id) and n != 1:
+            raise ImageGenerationError("continued image conversation only supports n=1")
+
         created = None
         image_items: list[dict[str, object]] = []
+        response_context: dict[str, object] = {}
+
+        if preferred_account_id or upstream_conversation_id or upstream_parent_message_id:
+            if not preferred_account_id:
+                raise ImageGenerationError("account_id is required for continued image conversation")
+            request_token = self.account_service.get_access_token_by_public_id(preferred_account_id)
+            if not request_token:
+                raise ImageGenerationError("bound account for continued image conversation was not found")
+            account = self.account_service.refresh_account_state(request_token)
+            if not self.account_service._is_image_account_available(account or {}):
+                raise ImageGenerationError("bound account for continued image conversation is unavailable")
+            print(
+                f"[image-generate] continue token={request_token[:12]}... model={model} "
+                f"account_id={preferred_account_id} conversation_id={upstream_conversation_id or '-'}"
+            )
+            try:
+                result = runner(
+                    request_token,
+                    upstream_conversation_id=upstream_conversation_id,
+                    upstream_parent_message_id=upstream_parent_message_id,
+                )
+                account = self.account_service.mark_image_result(request_token, success=True)
+            except ImageGenerationError as exc:
+                account = self.account_service.mark_image_result(request_token, success=False)
+                message = str(exc)
+                print(
+                    f"[image-generate] continue fail token={request_token[:12]}... "
+                    f"error={message} quota={account.get('quota') if account else 'unknown'} "
+                    f"status={account.get('status') if account else 'unknown'}"
+                )
+                if is_token_invalid_error(message):
+                    self.account_service.remove_token(request_token)
+                raise
+
+            created = result.get("created")
+            data = result.get("data")
+            if isinstance(data, list):
+                image_items.extend(item for item in data if isinstance(item, dict))
+            response_context = {
+                "account_id": self.account_service.get_public_id_by_access_token(request_token),
+                "upstream_conversation_id": result.get("upstream_conversation_id"),
+                "upstream_parent_message_id": result.get("upstream_parent_message_id"),
+            }
+            print(
+                f"[image-generate] continue success token={request_token[:12]}... "
+                f"quota={account.get('quota') if account else 'unknown'} status={account.get('status') if account else 'unknown'}"
+            )
+            if not image_items:
+                raise ImageGenerationError("image generation failed")
+            return {
+                "created": created,
+                "data": image_items,
+                **response_context,
+            }
 
         for index in range(1, n + 1):
             while True:
@@ -32,13 +102,23 @@ class ChatGPTService:
 
                 print(f"[image-generate] start pooled token={request_token[:12]}... model={model} index={index}/{n}")
                 try:
-                    result = generate_image_result(request_token, prompt, model)
+                    result = runner(
+                        request_token,
+                        upstream_conversation_id=upstream_conversation_id,
+                        upstream_parent_message_id=upstream_parent_message_id,
+                    )
                     account = self.account_service.mark_image_result(request_token, success=True)
                     if created is None:
                         created = result.get("created")
                     data = result.get("data")
                     if isinstance(data, list):
                         image_items.extend(item for item in data if isinstance(item, dict))
+                    if index == 1:
+                        response_context = {
+                            "account_id": self.account_service.get_public_id_by_access_token(request_token),
+                            "upstream_conversation_id": result.get("upstream_conversation_id"),
+                            "upstream_parent_message_id": result.get("upstream_parent_message_id"),
+                        }
                     print(
                         f"[image-generate] success pooled token={request_token[:12]}... "
                         f"quota={account.get('quota') if account else 'unknown'} status={account.get('status') if account else 'unknown'}"
@@ -63,7 +143,64 @@ class ChatGPTService:
         return {
             "created": created,
             "data": image_items,
+            **response_context,
         }
+
+    def generate_with_pool(
+        self,
+        prompt: str,
+        model: str,
+        n: int,
+        preferred_account_id: str | None = None,
+        upstream_conversation_id: str | None = None,
+        upstream_parent_message_id: str | None = None,
+    ):
+        return self._run_with_pool(
+            prompt,
+            model,
+            n,
+            lambda request_token, **context: generate_image_result(
+                request_token,
+                prompt,
+                model,
+                conversation_id=context.get("upstream_conversation_id"),
+                parent_message_id=context.get("upstream_parent_message_id"),
+            ),
+            preferred_account_id=preferred_account_id,
+            upstream_conversation_id=upstream_conversation_id,
+            upstream_parent_message_id=upstream_parent_message_id,
+        )
+
+    def edit_with_pool(
+        self,
+        prompt: str,
+        model: str,
+        n: int,
+        image_bytes: bytes,
+        image_mime_type: str,
+        image_filename: str | None,
+        preferred_account_id: str | None = None,
+        upstream_conversation_id: str | None = None,
+        upstream_parent_message_id: str | None = None,
+    ):
+        return self._run_with_pool(
+            prompt,
+            model,
+            n,
+            lambda request_token, **context: edit_image_result(
+                request_token,
+                prompt,
+                image_bytes=image_bytes,
+                image_mime_type=image_mime_type,
+                image_filename=image_filename,
+                model=model,
+                conversation_id=context.get("upstream_conversation_id"),
+                parent_message_id=context.get("upstream_parent_message_id"),
+            ),
+            preferred_account_id=preferred_account_id,
+            upstream_conversation_id=upstream_conversation_id,
+            upstream_parent_message_id=upstream_parent_message_id,
+        )
 
     def create_image_completion(self, body: dict[str, object]) -> dict[str, object]:
         if not is_image_chat_request(body):

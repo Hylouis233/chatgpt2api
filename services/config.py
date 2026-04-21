@@ -20,6 +20,7 @@ class AppSettings:
     host: str
     port: int
     accounts_file: Path
+    proxy_url: str | None
     refresh_account_interval_minute: int
 
 def _load_json_object(path: Path, *, name: str) -> dict[str, object]:
@@ -54,6 +55,7 @@ def _load_settings() -> AppSettings:
     auth_key = str(os.getenv("CHATGPT2API_AUTH_KEY") or raw_config.get("auth-key") or "").strip()
     if not auth_key:
         raise ValueError("config.example.json must contain a non-empty 'auth-key'")
+    proxy_url = str(os.getenv("CHATGPT2API_PROXY_URL") or raw_config.get("proxy-url") or "").strip() or None
     refresh_account_interval_minute = cast(int, raw_config.get("refresh_account_interval_minute", 5))
 
     return AppSettings(
@@ -61,6 +63,7 @@ def _load_settings() -> AppSettings:
         host="0.0.0.0",
         port=8000,
         accounts_file=DATA_DIR / "accounts.json",
+        proxy_url=proxy_url,
         refresh_account_interval_minute=refresh_account_interval_minute,
     )
 

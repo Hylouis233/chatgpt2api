@@ -11,5 +11,6 @@ wheels/
 .idea
 data
 config.json
+.env
 
 docker-compose-local.yml
