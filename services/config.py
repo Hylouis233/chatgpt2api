@@ -33,9 +33,10 @@ def _read_json_object(path: Path, *, name: str) -> dict[str, object]:
     return data if isinstance(data, dict) else {}
 
 
-def _load_settings() -> LoadedSettings:
+def _load_settings(path: Path | None = None) -> LoadedSettings:
     DATA_DIR.mkdir(parents=True, exist_ok=True)
-    raw_config = _read_json_object(CONFIG_FILE, name="config.json")
+    resolved_path = path or CONFIG_FILE
+    raw_config = _read_json_object(resolved_path, name=resolved_path.name)
     auth_key = str(os.getenv("CHATGPT2API_AUTH_KEY") or raw_config.get("auth-key") or "").strip()
     if not auth_key:
         raise ValueError(
@@ -59,6 +60,7 @@ class ConfigStore:
         self.path = path
         DATA_DIR.mkdir(parents=True, exist_ok=True)
         self.data = self._load()
+        self._settings = _load_settings(self.path)
         if not self.auth_key:
             raise ValueError(
                 "❌ auth-key 未设置！\n"
@@ -77,7 +79,7 @@ class ConfigStore:
 
     @property
     def auth_key(self) -> str:
-        return _load_settings().auth_key
+        return self._settings.auth_key
 
     @property
     def accounts_file(self) -> Path:
@@ -85,7 +87,7 @@ class ConfigStore:
 
     @property
     def refresh_account_interval_minute(self) -> int:
-        return _load_settings().refresh_account_interval_minute
+        return self._settings.refresh_account_interval_minute
 
     @property
     def images_dir(self) -> Path:
@@ -110,6 +112,7 @@ class ConfigStore:
     def update(self, data: dict[str, object]) -> dict[str, object]:
         self.data = dict(data or {})
         self._save()
+        self._settings = _load_settings(self.path)
         return self.get()
 
 
