@@ -62,7 +62,8 @@ class AccountService:
     def _is_image_account_available(account: dict) -> bool:
         if not isinstance(account, dict):
             return False
-        if account.get("status") == "禁用":
+        status = str(account.get("status") or "").strip()
+        if status in {"禁用", "限流"}:
             return False
         if bool(account.get("image_quota_unknown")):
             return True

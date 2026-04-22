@@ -222,6 +222,8 @@ def create_app() -> FastAPI:
     @router.post("/v1/images/generations")
     async def generate_images(body: ImageGenerationRequest, authorization: str | None = Header(default=None)):
         require_auth_key(authorization)
+        if body.response_format != "b64_json":
+            raise HTTPException(status_code=400, detail={"error": "only b64_json response_format is supported"})
         try:
             return await run_in_threadpool(
                 chatgpt_service.generate_with_pool,
@@ -240,7 +242,7 @@ def create_app() -> FastAPI:
         image: list[UploadFile] = File(...),
         prompt: str = Form(...),
         model: str = Form("gpt-image-2"),
-        n: int = Form(1),
+        n: int = Form(1, ge=1, le=4),
         response_format: str = Form("b64_json"),
         mask: UploadFile | None = File(default=None),
         account_id: str | None = Form(default=None),
@@ -257,8 +259,8 @@ def create_app() -> FastAPI:
         image_bytes = await upload.read()
         if not image_bytes:
             raise HTTPException(status_code=400, detail={"error": "image is required"})
-        if response_format not in {"b64_json", "url"}:
-            raise HTTPException(status_code=400, detail={"error": "unsupported response_format"})
+        if response_format != "b64_json":
+            raise HTTPException(status_code=400, detail={"error": "only b64_json response_format is supported"})
         try:
             return await run_in_threadpool(
                 chatgpt_service.edit_with_pool,

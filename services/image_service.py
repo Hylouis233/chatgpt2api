@@ -613,7 +613,9 @@ def _resolve_conversation_state(
         file_ids = _extract_image_ids(payload.get("mapping") or {})
         if file_ids:
             last_file_ids = file_ids
-        if last_current_node and (not require_file_ids or last_file_ids):
+        if last_file_ids:
+            return {"current_node": last_current_node, "file_ids": last_file_ids}
+        if last_current_node and not require_file_ids:
             return {"current_node": last_current_node, "file_ids": last_file_ids}
         time.sleep(3)
     return {"current_node": last_current_node, "file_ids": last_file_ids}

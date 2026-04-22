@@ -26,6 +26,7 @@ class ChatGPTService:
         n: int,
         runner,
         *,
+        operation_label: str,
         preferred_account_id: str | None = None,
         upstream_conversation_id: str | None = None,
         upstream_parent_message_id: str | None = None,
@@ -39,6 +40,7 @@ class ChatGPTService:
         created = None
         image_items: list[dict[str, object]] = []
         response_context: dict[str, object] = {}
+        log_prefix = f"[{operation_label}]"
 
         if preferred_account_id or upstream_conversation_id or upstream_parent_message_id:
             if not preferred_account_id:
@@ -51,7 +53,7 @@ class ChatGPTService:
                 raise ImageGenerationError("bound account for continued image conversation is unavailable")
             token_ref = anonymize_token(request_token)
             print(
-                f"[image-generate] continue token={token_ref} model={model} "
+                f"{log_prefix} continue token={token_ref} model={model} "
                 f"account_id={preferred_account_id} conversation_id={upstream_conversation_id or '-'}"
             )
             try:
@@ -65,7 +67,7 @@ class ChatGPTService:
                 account = self.account_service.mark_image_result(request_token, success=False)
                 message = str(exc)
                 print(
-                    f"[image-generate] continue fail token={token_ref} "
+                    f"{log_prefix} continue fail token={token_ref} "
                     f"error={message} quota={account.get('quota') if account else 'unknown'} "
                     f"status={account.get('status') if account else 'unknown'}"
                 )
@@ -83,7 +85,7 @@ class ChatGPTService:
                 "upstream_parent_message_id": result.get("upstream_parent_message_id"),
             }
             print(
-                f"[image-generate] continue success token={token_ref} "
+                f"{log_prefix} continue success token={token_ref} "
                 f"quota={account.get('quota') if account else 'unknown'} status={account.get('status') if account else 'unknown'}"
             )
             if not image_items:
@@ -99,11 +101,11 @@ class ChatGPTService:
                 try:
                     request_token = self.account_service.get_available_access_token()
                 except RuntimeError as exc:
-                    print(f"[image-generate] stop index={index}/{n} error={exc}")
+                    print(f"{log_prefix} stop index={index}/{n} error={exc}")
                     break
 
                 token_ref = anonymize_token(request_token)
-                print(f"[image-generate] start pooled token={token_ref} model={model} index={index}/{n}")
+                print(f"{log_prefix} start pooled token={token_ref} model={model} index={index}/{n}")
                 try:
                     result = runner(
                         request_token,
@@ -123,7 +125,7 @@ class ChatGPTService:
                             "upstream_parent_message_id": result.get("upstream_parent_message_id"),
                         }
                     print(
-                        f"[image-generate] success pooled token={token_ref} "
+                        f"{log_prefix} success pooled token={token_ref} "
                         f"quota={account.get('quota') if account else 'unknown'} status={account.get('status') if account else 'unknown'}"
                     )
                     break
@@ -131,12 +133,12 @@ class ChatGPTService:
                     account = self.account_service.mark_image_result(request_token, success=False)
                     message = str(exc)
                     print(
-                        f"[image-generate] fail pooled token={token_ref} "
+                        f"{log_prefix} fail pooled token={token_ref} "
                         f"error={message} quota={account.get('quota') if account else 'unknown'} status={account.get('status') if account else 'unknown'}"
                     )
                     if is_token_invalid_error(message):
                         self.account_service.remove_token(request_token)
-                        print(f"[image-generate] remove invalid token={token_ref}")
+                        print(f"{log_prefix} remove invalid token={token_ref}")
                         continue
                     break
 
@@ -169,6 +171,7 @@ class ChatGPTService:
                 conversation_id=context.get("upstream_conversation_id"),
                 parent_message_id=context.get("upstream_parent_message_id"),
             ),
+            operation_label="image-generate",
             preferred_account_id=preferred_account_id,
             upstream_conversation_id=upstream_conversation_id,
             upstream_parent_message_id=upstream_parent_message_id,
@@ -200,6 +203,7 @@ class ChatGPTService:
                 conversation_id=context.get("upstream_conversation_id"),
                 parent_message_id=context.get("upstream_parent_message_id"),
             ),
+            operation_label="image-edit",
             preferred_account_id=preferred_account_id,
             upstream_conversation_id=upstream_conversation_id,
             upstream_parent_message_id=upstream_parent_message_id,
