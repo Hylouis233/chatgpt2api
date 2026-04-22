@@ -12,6 +12,7 @@ from datetime import datetime
 from curl_cffi.requests import Session
 
 from services.config import config
+from services.proxy_service import proxy_settings
 from services.utils import anonymize_token
 
 
@@ -435,11 +436,7 @@ class AccountService:
         headers, impersonate = self._build_remote_headers(access_token)
         token_ref = anonymize_token(access_token)
         print(f"[account-refresh] start {token_ref}")
-        session = Session(
-            impersonate=impersonate,
-            verify=True,
-            proxy=config.proxy_url,
-        )
+        session = Session(**proxy_settings.build_session_kwargs(impersonate=impersonate, verify=True))
         session.headers.update(headers)
         try:
             with ThreadPoolExecutor(max_workers=2) as executor:
