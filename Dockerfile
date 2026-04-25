@@ -1,13 +1,15 @@
 FROM node:22-alpine AS web-build
 
 WORKDIR /app/web
+ARG NEXT_PUBLIC_BASE_PATH=""
+ENV NEXT_PUBLIC_BASE_PATH=${NEXT_PUBLIC_BASE_PATH}
 
 COPY web/package.json web/bun.lock ./
 RUN npm install
 
 COPY VERSION /app/VERSION
 COPY web ./
-RUN NEXT_PUBLIC_APP_VERSION="$(cat /app/VERSION)" npm run build
+RUN NEXT_PUBLIC_APP_VERSION="$(cat /app/VERSION)" NEXT_PUBLIC_BASE_PATH="${NEXT_PUBLIC_BASE_PATH}" npm run build
 
 
 FROM python:3.13-slim AS app

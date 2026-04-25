@@ -19,6 +19,11 @@ export function TopNav() {
 
   const handleLogout = async () => {
     await clearStoredAuthKey();
+    if (webConfig.basePath) {
+      await fetch("/api/user/logout", { credentials: "include" }).catch(() => undefined);
+      window.location.href = "/login";
+      return;
+    }
     router.replace("/login");
   };
 

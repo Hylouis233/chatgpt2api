@@ -15,10 +15,13 @@ function readAppVersion() {
 }
 
 const appVersion = process.env.NEXT_PUBLIC_APP_VERSION || readAppVersion()
+const appBasePath = (process.env.NEXT_PUBLIC_BASE_PATH || '').replace(/\/+$/, '')
 
 const nextConfig: NextConfig = {
+    ...(appBasePath ? { basePath: appBasePath, assetPrefix: appBasePath } : {}),
     env: {
         NEXT_PUBLIC_APP_VERSION: appVersion,
+        NEXT_PUBLIC_BASE_PATH: appBasePath,
     },
     output: 'export',
     images: {

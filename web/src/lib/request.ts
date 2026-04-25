@@ -31,7 +31,7 @@ request.interceptors.response.use(
         const shouldRedirect = (error.config as RequestConfig | undefined)?.redirectOnUnauthorized !== false;
         if (status === 401 && shouldRedirect && typeof window !== "undefined") {
             await clearStoredAuthKey();
-            window.location.href = "/login";
+            window.location.href = `${webConfig.basePath}/login`;
         }
 
         const payload = error.response?.data;
