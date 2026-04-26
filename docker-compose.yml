@@ -4,9 +4,18 @@ services:
     container_name: chatgpt2api
     restart: unless-stopped
     ports:
-      - "3300:80"
+      - "127.0.0.1:3300:80"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     volumes:
       - ./data:/app/data
       - ./config.json:/app/config.json:ro
       - ./main.py:/app/main.py:ro
       - ./services:/app/services:ro
+    networks:
+      - default
+      - newapi-stack_gateway
+
+networks:
+  newapi-stack_gateway:
+    external: true

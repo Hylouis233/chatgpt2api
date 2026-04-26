@@ -1,4 +1,4 @@
-import { httpRequest } from "@/lib/request";
+import { httpRequest, newApiRelayRequest } from "@/lib/request";
 
 export type AccountType = "Free" | "Plus" | "ProLite" | "Pro" | "Team";
 export type AccountStatus = "正常" | "限流" | "异常" | "禁用";
@@ -109,7 +109,7 @@ export async function updateAccount(
 }
 
 export async function generateImage(prompt: string, model: ImageModel = "gpt-image-2") {
-  return httpRequest<{
+  return newApiRelayRequest<{
     created: number;
     data: Array<{ b64_json: string; revised_prompt?: string }>;
     account_id?: string | null;
@@ -134,7 +134,7 @@ export async function generateImageWithContext(
   model: ImageModel = "gpt-image-2",
   context?: ImageConversationContext,
 ) {
-  return httpRequest<{
+  return newApiRelayRequest<{
     created: number;
     data: Array<{ b64_json: string; revised_prompt?: string }>;
     account_id?: string | null;
@@ -162,7 +162,7 @@ export async function editImage(image: File, prompt: string, model: ImageModel =
   formData.append("n", "1");
   formData.append("response_format", "b64_json");
 
-  return httpRequest<{
+  return newApiRelayRequest<{
     created: number;
     data: Array<{ b64_json: string; revised_prompt?: string }>;
     account_id?: string | null;
@@ -199,7 +199,7 @@ export async function editImageWithContext(
     formData.append("upstream_parent_message_id", context.upstreamParentMessageId);
   }
 
-  return httpRequest<{
+  return newApiRelayRequest<{
     created: number;
     data: Array<{ b64_json: string; revised_prompt?: string }>;
     account_id?: string | null;
